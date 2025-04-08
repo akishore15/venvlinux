@@ -97,11 +97,6 @@ EOF
 
   echo "Dockerfile created at ${dockerfile_dir}/Dockerfile."
 
-  # Ensure the LinuxLogo.svg file exists
-  if [ ! -f "LinuxLogo.svg" ]; then
-    echo "LinuxLogo.svg not found in the current directory. Please ensure the file exists."
-    exit 1
-  fi
 
   # Copy the LinuxLogo.svg into build directory
   cp LinuxLogo.svg "${dockerfile_dir}/"
