@@ -1,6 +1,5 @@
 #!/bin/bash
 
-echo "Welcome to VENVLinux's VENV creator!"
 # Function to check if the user is in the sudo group
 check_sudo_access() {
   if sudo -n true 2>/dev/null; then
@@ -72,25 +71,70 @@ install_docker() {
   fi
 }
 
-# Function to pull the Docker image and create the container
-create_container() {
+# Function to build a Docker image with the HTTP server
+build_image_with_file() {
   local distro=$1
   local tag=$2
-  local container_name="venv"
+  local dockerfile_dir="VENVLinuxBuild"
 
-  # Pull the Docker image
-  echo "Pulling image ${distro}:${tag}..."
-  docker pull "${distro}:${tag}"
-  if [ $? -ne 0 ]; then
-    echo "Failed to pull the image ${distro}:${tag}. Please check the distribution and tag."
+  echo "Preparing the Docker build directory..."
+  mkdir -p "${dockerfile_dir}"
+  cat <<EOF > "${dockerfile_dir}/Dockerfile"
+FROM ${distro}:${tag}
+
+# Install Python for the HTTP server
+RUN apt-get update && apt-get install -y python3 && apt-get clean
+
+# Add the LinuxLogo.svg to the container
+COPY LinuxLogo.svg /LinuxLogo.svg
+
+# Expose port 8000 for the HTTP server
+EXPOSE 8000
+
+# Start the HTTP server when the container runs
+CMD ["python3", "-m", "http.server", "8000"]
+EOF
+
+  echo "Dockerfile created at ${dockerfile_dir}/Dockerfile."
+
+  # Ensure the LinuxLogo.svg file exists
+  if [ ! -f "LinuxLogo.svg" ]; then
+    echo "LinuxLogo.svg not found in the current directory. Please ensure the file exists."
     exit 1
   fi
 
-  # Create and run the container
-  echo "Creating and running the container '${container_name}'..."
-  docker run -dit --name "${container_name}" "${distro}:${tag}"
+  # Copy the LinuxLogo.svg into build directory
+  cp LinuxLogo.svg "${dockerfile_dir}/"
+
+  # Build the Docker image
+  echo "Building the Docker image..."
+  docker build -t venv_image "${dockerfile_dir}"
   if [ $? -eq 0 ]; then
-    echo "Container '${container_name}' created and running successfully."
+    echo "Docker image built successfully."
+  else
+    echo "Failed to build the Docker image."
+    exit 1
+  fi
+
+  # Clean up build directory
+  rm -rf "${dockerfile_dir}"
+}
+
+# Function to create and run the Docker container
+create_and_run_container() {
+  local container_name="venv"
+
+  # Check if the container already exists
+  if docker ps -a --format '{{.Names}}' | grep -w "${container_name}" &> /dev/null; then
+    echo "A container named '${container_name}' already exists. Removing it..."
+    docker rm -f "${container_name}"
+  fi
+
+  # Run the container
+  echo "Creating and running the container '${container_name}'..."
+  docker run -dit --name "${container_name}" -p 8000:8000 venv_image
+  if [ $? -eq 0 ]; then
+    echo "Container '${container_name}' is running. You can access LinuxLogo.svg at http://localhost:8000/LinuxLogo.svg"
   else
     echo "Failed to create and run the container '${container_name}'."
     exit 1
@@ -116,5 +160,8 @@ if [[ -z "$distro" || -z "$tag" ]]; then
   exit 1
 fi
 
-# Create the container
-create_container "$distro" "$tag"
+# Build the Docker image
+build_image_with_file "$distro" "$tag"
+
+# Create and run the container
+create_and_run_container
